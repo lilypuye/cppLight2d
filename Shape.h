@@ -2,7 +2,7 @@
 
 #include "basic.h"
 
-#define EPSILON 1e-6f
+#define EPSILON 1e-5f
 
 class Shape
 {
@@ -19,14 +19,17 @@ public:
 	{
 		return false;
 	}
+	//判断是否在shape内部
 	virtual bool IsInside(Point p)
 	{
 		return false;
 	}
+	//获取边界上的点所在位置的法向
 	virtual Vector GetNormal(Point p)
 	{
 		return{ 0.f, 1.f };
 	}
+	//是否在边界上
 	virtual bool IsOnBoundary(Point p)
 	{
 		return false;
@@ -35,7 +38,7 @@ public:
 
 class Line :public Shape
 {
-	//半平面表示形式：ax + by + c > 0， 法线方向m_normal
+	//半平面表示形式：m_a*x + m_b*y + m_c > 0， 法线方向m_normal
 protected:
 	float m_a;
 	float m_b;
@@ -87,7 +90,8 @@ public:
 		{
 			Point inter;
 			CalcIntersect(p, d, inter);
-			if (inter.IsValid()) return true;
+			//if (inter.IsValid()) 
+			return true;
 		}
 		return false;
 	}
@@ -96,13 +100,17 @@ public:
 	{
 		if (IsInside(p))
 		{
-			inter = p;
+			//inter = p;
+			CalcIntersect(p, d, inter);
+			if ((inter - p)*d < 0)	//射线的反向与直线相交
+				inter = { -1.f, -1.f };
 			return true;
 		}
 		if (d*m_normal < 0)
 		{
 			CalcIntersect(p, d, inter);
-			if (inter.IsValid()) return true;
+			//if (inter.IsValid()) 
+			return true;
 		}
 		return false;
 	}
@@ -140,12 +148,12 @@ public:
 	{
 		if (IsInside(p))
 		{
-			//float proj = (m_o - p)*d;
-			//Point foot = p + d * proj;
-			//float dis1 = (m_o - foot).len();
-			//float dis2 = sqrt(m_r*m_r - dis1*dis1);
-			//inter = foot + d * dis2;
-			inter = p;
+			float proj = (m_o - p)*d;
+			Point foot = p + d * proj;
+			float dis1 = (m_o - foot).len();
+			float dis2 = sqrt(m_r*m_r - dis1*dis1);
+			inter = foot + d * dis2;
+			//inter = p;
 			return true;
 		}
 		float proj = (m_o - p)*d;					//向量po在射线上垂足的距离
@@ -240,6 +248,64 @@ public:
 			return m_shape1->GetNormal(p);
 		if (m_shape2->IsOnBoundary(p))
 			return m_shape2->GetNormal(p);
+		return{ 0.f, 1.f };
+	}
+
+	bool Intersect(Point p, Vector d)
+	{
+		Point inter1, inter2;
+		if (!(m_shape1->Intersect(p, d, inter1) && m_shape2->Intersect(p, d, inter2)))
+			return false;
+		return m_shape2->IsInside(inter1) || m_shape1->IsInside(inter2);
+	}
+
+	bool Intersect(Point p, Vector d, Point &inter)
+	{
+		Point inter1, inter2;
+		if (!(m_shape1->Intersect(p, d, inter1) && m_shape2->Intersect(p, d, inter2)))
+			return false;
+		if (m_shape2->IsInside(inter1) && m_shape1->IsInside(inter2))	//两个交点都合法，则取最近的交点
+			inter = (inter1 - p).len() > (inter2 - p).len() ? inter2 : inter1;
+		else if (m_shape2->IsInside(inter1))
+			inter = inter1;
+		else if (m_shape1->IsInside(inter2))
+			inter = inter2;
+		else
+			return false;
+		return true;
+	}
+};
+
+
+//交点计算未完成，暂不可用
+class ShapeSubstract : public Shape
+{
+private:
+	Shape* m_shape1;
+	Shape* m_shape2;
+public:
+	ShapeSubstract(Shape* shape1, Shape* shape2)
+	{
+		m_shape1 = shape1, m_shape2 = shape2;
+	}
+
+	bool IsInside(Point p)
+	{
+		return m_shape1->IsInside(p) && (!m_shape2->IsInside(p));
+	}
+
+	bool IsOnBoundary(Point p)
+	{
+		return m_shape1->IsOnBoundary(p) || m_shape2->IsOnBoundary(p);
+	}
+	Vector GetNormal(Point p)
+	{
+		if (m_shape1->IsOnBoundary(p) && m_shape2->IsOnBoundary(p))
+			return ((m_shape1->GetNormal(p)) - (m_shape2->GetNormal(p))) / 2.f;
+		if (m_shape1->IsOnBoundary(p))
+			return m_shape1->GetNormal(p);
+		if (m_shape2->IsOnBoundary(p))
+			return -(m_shape2->GetNormal(p));
 		return{ 0.f, 1.f };
 	}
 

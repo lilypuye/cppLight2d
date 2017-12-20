@@ -9,6 +9,14 @@ struct Vector
 	{
 		return{ x + v.x, y + v.y };
 	}
+	Vector operator-(Vector v)
+	{
+		return{ x - v.x, y - v.y };
+	}
+	Vector operator-(void)
+	{
+		return{ -x, -y };
+	}
 	float operator*(Vector v) //µã³Ë
 	{
 		return x*v.x + y*v.y;
