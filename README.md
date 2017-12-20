@@ -10,7 +10,7 @@ The main idea is similar with milo's, following are the differences:
 
 1. Ray intersection is used instead of ray marching to speed up, so no SDF(signed distance field), so only one calculation in one ray.
 2. Only Line and Circle are used as basic shapes. Polygons are generated from lines.
-3. more colors ~ 
+3. Different refract indexes are given for different colors.
 
 With the use of SDF, normal calculation can be written in less code , and easier to understand. 
 While in my project, normals and intersect points are all calculated analytically. Maybe not so intuitive.
@@ -21,7 +21,14 @@ an example of reflection
 
 ![](reflect.png)
 
+some examples of refraction
+
+![](lesson4-10.png)
+
+![](lesson4-12.png)
+
+![](lesson4-14.png)
 
 # TODO
-1. refraction
-2. GUI and more fun~
+1. more entities
+2. GUI
