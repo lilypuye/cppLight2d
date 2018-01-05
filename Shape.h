@@ -34,6 +34,11 @@ public:
 	{
 		return false;
 	}
+	//是否在包围盒内部
+	virtual bool Contained(float left, float right, float up, float down)
+	{
+		return false;
+	}
 };
 
 class Line :public Shape
@@ -123,6 +128,8 @@ protected:
 	float m_r;	//半径
 public:
 	Circle(Point o, float r) :m_o(o), m_r(r) {}
+	Point GetCenter() { return m_o; }
+	float GetRadius() { return m_r; }
 	bool IsInside(Point p)
 	{
 		return (m_o - p).len() <= m_r;
@@ -165,6 +172,11 @@ public:
 		inter = foot - d * dis2;
 		return true;
 	}
+	bool Contained(float left, float right, float up, float down)
+	{
+		return (m_o.x - m_r > left) && (m_o.x + m_r < right) 
+				&& (m_o.y - m_r > up) && (m_o.y + m_r < down);
+	}
 };
 
 class ShapeUnion :public Shape
@@ -176,6 +188,11 @@ public:
 	ShapeUnion(Shape* shape1, Shape* shape2)
 	{
 		m_shape1 = shape1, m_shape2 = shape2;
+	}
+	~ShapeUnion()
+	{
+		delete m_shape1;
+		delete m_shape2;
 	}
 	bool IsInside(Point p)
 	{
@@ -230,7 +247,11 @@ public:
 	{
 		m_shape1 = shape1, m_shape2 = shape2;
 	}
-
+	~ShapeIntersect()
+	{
+		delete m_shape1;
+		delete m_shape2;
+	}
 	bool IsInside(Point p)
 	{
 		return m_shape1->IsInside(p) && m_shape2->IsInside(p);

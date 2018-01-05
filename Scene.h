@@ -1,17 +1,13 @@
 #pragma once
-#include <iostream>
 #include <stdlib.h> // rand(), RAND_MAX
-#include <vector>
-using std::vector;
 #include "Shape.h"
 #include "QuadTree.h"
 
 using namespace std;
 
-
-#define MAX_DEPTH 3
+#define MAX_DEPTH 4
 #define IS_DEBUG false
-#define N 64
+#define N 16
 #define TWO_PI 6.28318530718f
 #define BIAS 1e-4f
 
@@ -33,14 +29,21 @@ public:
 			for (int i = 0; i < 3; i++)
 				m_refract_index[i] = ri[i];
 	}
+	~Entity() { SAFE_DELETE(m_shape); }
 	Shape* GetShape() { return m_shape; }
 	Color GetEmissive() { return m_emissive; }
 	float GetReflectivity() { return m_reflectivity; }
 	float GetRefractivity() { return m_refractivity; }
 	float GetRefractIndex(int index) { return m_refract_index[index]; }
+	//判断是否相交并返回交点
 	virtual bool Intersect(Point p, Vector d, Point &inter)
 	{
 		return m_shape->Intersect(p, d, inter);
+	}
+	//判断是否在包围盒内部
+	bool Contained(float left, float right, float up, float down)
+	{
+		return m_shape->Contained(left, right, up, down);
 	}
 };
 
@@ -57,6 +60,7 @@ public:
 	{
 		m_cosa = cos(a);
 	}
+	~SpotLight() {}
 	bool Intersect(Point p, Vector d, Point &inter)
 	{
 		if (d*(-m_dir) < m_cosa)	//预过滤角度方向在照射范围外的光线
@@ -69,10 +73,20 @@ public:
 class Scene
 {
 protected:
-	vector<Entity*> m_entities;
+	QuadTree<Entity>* m_entityTree;
+	list<Entity*> m_entities;		//依然保留entity列表，用于调试
 public:
-	Scene(vector<Entity*> entities) :m_entities(entities) {}
-	vector<Entity*> GetEntities() { return m_entities; }
+	Scene(list<Entity*> entities):m_entities(entities)
+	{
+		m_entityTree = new QuadTree<Entity>(entities);
+	}
+	~Scene()
+	{
+		delete m_entityTree;
+		for (auto ent : m_entities)
+			SAFE_DELETE(ent);
+	}
+	list<Entity*> GetEntities() { return m_entities; }
 	Color Refract(Entity* ent, Point inter, Vector d, Vector normal, int color_index, int depth)
 	{
 		if (depth > MAX_DEPTH || ent->GetRefractivity() == 0.f) return{ 0.f, 0.f,0.f };
@@ -101,48 +115,74 @@ public:
 		Vector reflect = d.reflect(normal);
 		return GetColor(inter + reflect * BIAS, reflect, color_index, depth) * ent->GetReflectivity();
 	}
-	Color GetColor(Point p, Vector d, int color_index, int depth = 0)	//获取p点从d方向收到的emissive
+	Color GetColorNoTree(Point p, Vector d, int color_index, int depth = 0)	//获取p点从d方向收到的emissive
 	{
 		Color trace_emissive{ 0.0f, 0.0f, 0.0f };
 		float distance = 10.0f;
-		int ent_index = -1;
+		Entity* ent_near = NULL;
 		Point inter;
-		for (int j = 0; j < m_entities.size(); j++)
+		for (auto ent:m_entities)
 		{
 			Point tmp_inter;
-			if (m_entities[j]->Intersect(p, d, tmp_inter))
+			if (ent->Intersect(p, d, tmp_inter))
 			{
 				float new_dist = (tmp_inter - p).len();
 				if (distance > new_dist)
 				{
-					ent_index = j;
+					ent_near = ent;
 					distance = new_dist;
 					inter = tmp_inter;
 				}
 			}
 		}
-		if (ent_index >= 0)
+		if (ent_near)
 		{
-			Entity* ent = m_entities[ent_index];
 			if (IS_DEBUG)
 				drawLine(p, inter);
-			Vector normal = ent->GetShape()->GetNormal(inter);
-			Color reflect = Reflect(m_entities[ent_index], inter, d, normal, color_index, depth + 1);
+			Vector normal = ent_near->GetShape()->GetNormal(inter);
+			Color reflect = Reflect(ent_near, inter, d, normal, color_index, depth + 1);
 			Color refract = { 0.f, 0.f, 0.f };
 			if (color_index >= 3)
 			{
-				refract.r = Refract(ent, inter, d, normal, 0, depth + 1).r;
-				refract.g = Refract(ent, inter, d, normal, 1, depth + 1).g;
-				refract.b = Refract(ent, inter, d, normal, 2, depth + 1).b;
+				refract.r = Refract(ent_near, inter, d, normal, 0, depth + 1).r;
+				refract.g = Refract(ent_near, inter, d, normal, 1, depth + 1).g;
+				refract.b = Refract(ent_near, inter, d, normal, 2, depth + 1).b;
 			}
 			else
-				refract = Refract(ent, inter, d, normal, color_index, depth + 1);
-			return ent->GetEmissive() + reflect + refract;
+				refract = Refract(ent_near, inter, d, normal, color_index, depth + 1);
+			return ent_near->GetEmissive() + reflect + refract;
 		}
 		else
 			return{ 0.0f, 0.0f, 0.0f };
 	}
-	Color sample(Point p)
+	Color GetColor(Point p, Vector d, int color_index, int depth = 0)	//获取p点从d方向收到的emissive
+	{
+		Color trace_emissive{ 0.0f, 0.0f, 0.0f };
+		float distance = 10.0f;
+		Entity* ent_near = NULL;
+		Point inter;
+		m_entityTree->Intersect(p, d, ent_near, inter);
+		if (ent_near)
+		{
+			if (IS_DEBUG)
+				drawLine(p, inter);
+			Vector normal = ent_near->GetShape()->GetNormal(inter);
+			Color reflect = Reflect(ent_near, inter, d, normal, color_index, depth + 1);
+			Color refract = { 0.f, 0.f, 0.f };
+			if (color_index >= 3)
+			{
+				refract.r = Refract(ent_near, inter, d, normal, 0, depth + 1).r;
+				refract.g = Refract(ent_near, inter, d, normal, 1, depth + 1).g;
+				refract.b = Refract(ent_near, inter, d, normal, 2, depth + 1).b;
+			}
+			else
+				refract = Refract(ent_near, inter, d, normal, color_index, depth + 1);
+			return ent_near->GetEmissive() + reflect + refract;
+		}
+		else
+			return{ 0.0f, 0.0f, 0.0f };
+	}
+	Color Sample(Point p)
 	{
 		Color sum{ 0.0f, 0.0f, 0.0f };
 		for (int i = 0; i < N; i++)
@@ -152,7 +192,6 @@ public:
 			sum = sum + GetColor(p, { cosf(a), sinf(a) }, 3);
 		}
 		return sum / N;
-		//return GetColor(p, { cosf(TWO_PI*-0.26f), sinf(TWO_PI*-0.26f) }, 3);
 	}
 	Color GetBaseColor(Point p)
 	{
