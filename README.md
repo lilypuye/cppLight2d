@@ -1,5 +1,9 @@
 # cppLight2d
 
+Chinese introduction can be seen at
+[draw light with C++](https://zhuanlan.zhihu.com/c_149498082).
+
+
 This project illustrates light rendering in 2D with C++.
 
 All samples output PNGs with [svpng](https://github.com/miloyip/svpng).
@@ -28,6 +32,11 @@ some examples of refraction
 ![](lesson4-12.png)
 
 ![](lesson4-14.png)
+
+
+an example of a scene with QuadTree
+
+![](lesson5-5.png)
 
 # TODO
 1. more entities
