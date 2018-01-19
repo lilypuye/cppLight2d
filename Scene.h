@@ -5,11 +5,13 @@
 
 using namespace std;
 
-#define MAX_DEPTH 4
+#define MAX_DEPTH 5
 #define IS_DEBUG false
 #define N 16
+#define N2 16
 #define TWO_PI 6.28318530718f
 #define BIAS 1e-4f
+#define USE_QUADTREE false
 
 void drawLine(Point p1, Point p2);
 
@@ -20,7 +22,7 @@ protected:
 	Color m_emissive;
 	float m_reflectivity;		//不考虑漫反射
 	float m_refractivity;		//一般的，要求reflectivity + refractivity <= 1
-	float m_refract_index[3];	//认为每种颜色可以有不同的折射率
+	float m_refract_index[N2];	//认为每种颜色可以有不同的折射率
 public:
 	Entity(Shape* s, Color e, float re = 0.f, float ra = 0.f, float* ri = NULL) :
 		m_shape(s), m_emissive(e), m_reflectivity(re), m_refractivity(ra)
@@ -28,6 +30,12 @@ public:
 		if (ri)
 			for (int i = 0; i < 3; i++)
 				m_refract_index[i] = ri[i];
+	}
+	Entity(Shape* s, Color e, float re, float ra, float ri_min, float ri_max) :
+		m_shape(s), m_emissive(e), m_reflectivity(re), m_refractivity(ra)
+	{
+		for (int i = 0; i < N2; i++)
+			m_refract_index[i] = (ri_max - ri_min) / (N2 - 1) * i + ri_min;
 	}
 	~Entity() { SAFE_DELETE(m_shape); }
 	Shape* GetShape() { return m_shape; }
@@ -73,6 +81,16 @@ public:
 class Scene
 {
 protected:
+	Color rainbow[7] =
+	{
+		{ 1.f,0.f,0.f },
+		{ 1.f,0.65f,0.f },
+		{ 1.f,1.f,0.f },
+		{ 0.f,1.f,0.f },
+		{ 0.f,0.5f,1.f },
+		{ 0.f,0.f, 1.f },
+		{ 0.55f,0.f,1.f },
+	};
 	QuadTree<Entity>* m_entityTree;
 	list<Entity*> m_entities;		//依然保留entity列表，用于调试
 public:
@@ -87,6 +105,23 @@ public:
 			SAFE_DELETE(ent);
 	}
 	list<Entity*> GetEntities() { return m_entities; }
+	Color GetRefractColor(int index)
+	{
+		float idxf = index * 6.f / (N2 - 1);
+		float idx1 = floor(idxf);
+		float idx2 = ceil(idxf);
+		float gap1 = idxf - idx1;
+		float gap2 = idx2 - idxf;
+		Color color;
+		if (idx1 == idx2)
+			color = rainbow[(int)idx2];
+		else
+			color = {	rainbow[(int)idx1].r * gap2 + rainbow[(int)idx2].r * gap1,
+						rainbow[(int)idx1].g * gap2 + rainbow[(int)idx2].g * gap1,
+						rainbow[(int)idx1].b * gap2 + rainbow[(int)idx2].b * gap1,
+		};
+		return color;
+	}
 	Color Refract(Entity* ent, Point inter, Vector d, Vector normal, int color_index, int depth)
 	{
 		if (depth > MAX_DEPTH || ent->GetRefractivity() == 0.f) return{ 0.f, 0.f,0.f };
@@ -115,12 +150,15 @@ public:
 		Vector reflect = d.reflect(normal);
 		return GetColor(inter + reflect * BIAS, reflect, color_index, depth) * ent->GetReflectivity();
 	}
-	Color GetColorNoTree(Point p, Vector d, int color_index, int depth = 0)	//获取p点从d方向收到的emissive
+	Color GetColor(Point p, Vector d, int color_index, int depth = 0)	//获取p点从d方向收到的emissive
 	{
 		Color trace_emissive{ 0.0f, 0.0f, 0.0f };
 		float distance = 10.0f;
 		Entity* ent_near = NULL;
 		Point inter;
+#if USE_QUADTREE
+		m_entityTree->Intersect(p, d, ent_near, inter);
+#else
 		for (auto ent:m_entities)
 		{
 			Point tmp_inter;
@@ -135,6 +173,8 @@ public:
 				}
 			}
 		}
+#endif // USE_QUADTREE
+		
 		if (ent_near)
 		{
 			if (IS_DEBUG)
@@ -142,38 +182,15 @@ public:
 			Vector normal = ent_near->GetShape()->GetNormal(inter);
 			Color reflect = Reflect(ent_near, inter, d, normal, color_index, depth + 1);
 			Color refract = { 0.f, 0.f, 0.f };
-			if (color_index >= 3)
+			if (color_index >= N2)
 			{
-				refract.r = Refract(ent_near, inter, d, normal, 0, depth + 1).r;
-				refract.g = Refract(ent_near, inter, d, normal, 1, depth + 1).g;
-				refract.b = Refract(ent_near, inter, d, normal, 2, depth + 1).b;
-			}
-			else
-				refract = Refract(ent_near, inter, d, normal, color_index, depth + 1);
-			return ent_near->GetEmissive() + reflect + refract;
-		}
-		else
-			return{ 0.0f, 0.0f, 0.0f };
-	}
-	Color GetColor(Point p, Vector d, int color_index, int depth = 0)	//获取p点从d方向收到的emissive
-	{
-		Color trace_emissive{ 0.0f, 0.0f, 0.0f };
-		float distance = 10.0f;
-		Entity* ent_near = NULL;
-		Point inter;
-		m_entityTree->Intersect(p, d, ent_near, inter);
-		if (ent_near)
-		{
-			if (IS_DEBUG)
-				drawLine(p, inter);
-			Vector normal = ent_near->GetShape()->GetNormal(inter);
-			Color reflect = Reflect(ent_near, inter, d, normal, color_index, depth + 1);
-			Color refract = { 0.f, 0.f, 0.f };
-			if (color_index >= 3)
-			{
-				refract.r = Refract(ent_near, inter, d, normal, 0, depth + 1).r;
-				refract.g = Refract(ent_near, inter, d, normal, 1, depth + 1).g;
-				refract.b = Refract(ent_near, inter, d, normal, 2, depth + 1).b;
+				//refract.r = Refract(ent_near, inter, d, normal, 0, depth + 1).r;
+				//refract.g = Refract(ent_near, inter, d, normal, 1, depth + 1).g;
+				//refract.b = Refract(ent_near, inter, d, normal, 2, depth + 1).b;
+//#pragma omp parallel for
+				for (int i = 0; i < N2; i++)
+					refract = refract + Refract(ent_near, inter, d, normal, i, depth + 1) * GetRefractColor(i);
+				refract = refract * 2.f / N2;
 			}
 			else
 				refract = Refract(ent_near, inter, d, normal, color_index, depth + 1);
@@ -185,12 +202,16 @@ public:
 	Color Sample(Point p)
 	{
 		Color sum{ 0.0f, 0.0f, 0.0f };
+		Color tmp[N];
+#pragma omp parallel for
 		for (int i = 0; i < N; i++)
 		{
 			float a = TWO_PI * (i + (float)rand() / RAND_MAX) / N;
 			//float a = TWO_PI * (i) / N;
-			sum = sum + GetColor(p, { cosf(a), sinf(a) }, 3);
+			tmp[i] = GetColor(p, { cosf(a), sinf(a) }, N2);
 		}
+		for (int i = 0; i < N; i++)
+			sum = sum + tmp[i];
 		return sum / N;
 	}
 	Color GetBaseColor(Point p)

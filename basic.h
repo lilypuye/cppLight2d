@@ -81,6 +81,10 @@ struct Color
 	{
 		return{ r*f, g*f, b*f };
 	}
+	Color operator*(Color c)
+	{
+		return{ r*c.r, g*c.g, b*c.b };
+	}
 	Color operator/(float f)
 	{
 		return{ r / f, g / f,b / f };
