@@ -40,6 +40,8 @@ an example of a scene with QuadTree
 
 when more separate colors are calculated, results can be more visually natural.
 
+![](lesson6-9.png)
+
 ![](lesson6-11.png)
 
 ![](lesson6-14.png)
