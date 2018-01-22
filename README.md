@@ -38,6 +38,8 @@ an example of a scene with QuadTree
 
 ![](lesson5-5.png)
 
-# TODO
-1. more entities
-2. GUI
+when more separate colors are calculated, results can be more visually natural.
+
+![](lesson6-11.png)
+
+![](lesson6-14.png)
